@@ -1,0 +1,17 @@
+{
+  "name": "yolo-robot",
+  "version": "0.0.1",
+  "dependencies": {
+    "express": "4.8.3",
+    "lodash": "2.4.1",
+    "git-promise": "0.2.0",
+    "q": "~1.0.0",
+    "node-json-db": "0.3.2"
+  },
+  "devDependencies": {
+    "gulp": "^3.8.8",
+    "gulp-jshint": "^1.8.4",
+    "gulp-jscs": "^1.1.2",
+    "jshint-stylish": "georgiyordanov/jshint-stylish#12910209e597490536454a1558d71f1f8f62f27b"
+  }
+}
