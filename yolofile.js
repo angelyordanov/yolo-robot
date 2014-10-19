@@ -8,7 +8,7 @@ var _ = require('lodash'),
     exec = require('child_process').exec;
 
 exports.config = {
-  webhooksPort: 9000,
+  webhooksPort: 3637,
   webhooksPath: 'webhooks',
   repository: 'https://angelyordanov@github.com/angelyordanov/eumis.git',
   branch: 'master',
