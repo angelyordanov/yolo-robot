@@ -4,7 +4,8 @@
 /*jshint globalstrict:true*/
 /*global require, console, process*/
 
-var express = require('express'),
+var _ = require('lodash'),
+    express = require('express'),
     fs = require('fs'),
     path = require('path'),
     gitPromise = require('git-promise'),
@@ -35,77 +36,86 @@ if (fs.existsSync(cloneDir)) {
   cloned = false;
 }
 
-function fetch() {
-  console.log('fetching repo...');
-  return repo.fetch().then(function () {
-    console.log('repo fetched');
-  });
-}
-
-function prepare(branch) {
-  return repo.checkout(branch).then(function () {
-    return repo.resetHardToRemote(branch);
-  });
-}
-
-function build(branch) {
-  //init build history
-  db.push('/buildHistory', [], false);
-  
-  var buildHistory = db.getData('/buildHistory'),
-      lastBuild = buildHistory[buildHistory.length - 1],
-      hash = repo.branches[branch].localHash,
-      result;
-  
-  if (lastBuild &&
-    lastBuild.succeeded &&
-    lastBuild.hash === hash
-  ) {
-    console.log('no changes in branch \'' + branch + '\'');
-    return q(0);
+function doBuild(starting) {
+  function fetch() {
+    console.log('fetching repo...');
+    return repo.fetch().then(function () {
+      console.log('repo fetched');
+    });
   }
 
-  console.log('building branch \'' + branch + '\'...');
-  try {
-    result = q.when(yolofile.build(branch, hash, buildHistory));
-  } catch (err) {
-    result = q.reject(err);
-  }
-  
-  return result.then(function (res) {
-    console.log('built succeeded for branch \'' + branch + '\'!');
-    db.push('/buildHistory', [{
-      branch: branch,
-      hash: hash,
-      succeeded: true,
-      result: res
-    }], false);
-  }, function (err) {
-    console.log('built failed for branch \'' + branch + '\'!');
-    console.log(err);
+  function build(branch) {
+    //init build history
+    db.push('/buildHistory', [], false);
     
-    //make Error serializable
-    if (err.constructor.prototype === Error.prototype) {
-      err = {
-        message: err.message,
-        stack: err.stack
-      };
+    var buildHistory = db.getData('/buildHistory'),
+        lastBuild = buildHistory[buildHistory.length - 1],
+        hash = repo.branches[branch].localHash,
+        result;
+    
+    if (lastBuild &&
+      (!starting || lastBuild.succeeded) && //build failed branches on startup
+      lastBuild.hash === hash
+    ) {
+      console.log('no changes in branch \'' + branch + '\'');
+      return q(0);
+    }
+
+    console.log('building branch \'' + branch + '\'...');
+    try {
+      result = q.when(yolofile.build(branch, hash, buildHistory));
+    } catch (err) {
+      result = q.reject(err);
     }
     
-    db.push('/buildHistory', [{
-      branch: branch,
-      hash: hash,
-      succeeded: false,
-      error: err
-    }], false);
-  });
-}
+    return result.then(function (res) {
+      if (res) {
+        console.log('built succeeded for branch \'' + branch + '\'!');
+        db.push('/buildHistory', [{
+          branch: branch,
+          hash: hash,
+          succeeded: true,
+          result: res
+        }], false);
+      } else {
+        console.log('built skipped for branch \'' + branch + '\'!');
+      }
+    }, function (err) {
+      console.log('built failed for branch \'' + branch + '\'!');
+      console.log(err);
+      
+      //make Error serializable
+      if (err.constructor.prototype === Error.prototype) {
+        err = {
+          message: err.message,
+          stack: err.stack
+        };
+      }
+      
+      db.push('/buildHistory', [{
+        branch: branch,
+        hash: hash,
+        succeeded: false,
+        error: err
+      }], false);
+    });
+  }
 
-function doBuild() {
+  function createBranchBuilder(branch) {
+    return function () {
+      return _.reduce([
+        _.bind(repo.checkout, repo, branch),
+        _.bind(repo.resetHardToRemote, repo, branch),
+        _.partial(build, branch)
+      ], q.when, q(0));
+    };
+  }
+
   return fetch().then(function () {
-    return prepare(config.branch);
-  }).then(function () {
-    return build(config.branch);
+    return _(repo.branches)
+      .keys()
+      .map(createBranchBuilder)
+      .reduce(q.when, q(0));
   });
 }
 
@@ -121,7 +131,7 @@ next = next.then(function () {
     console.log('dir not empty, assuming repo cloned');
   }
 }).then(function () {
-  return doBuild();
+  return doBuild(true);
 }).then(function () {
   app.post('/' + config.webhooksPath, function (req, res) {
     console.log('webhook called');
@@ -129,7 +139,7 @@ next = next.then(function () {
     res.end();
 
     next = next.then(function () {
-      return doBuild();
+      return doBuild(false);
     }).done();//throw any errors caught during build
   });
   app.use(function (err, req, res, next) {

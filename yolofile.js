@@ -10,12 +10,15 @@ var _ = require('lodash'),
 exports.config = {
   webhooksPort: 3637,
   webhooksPath: 'webhooks',
-  repository: 'https://angelyordanov@github.com/angelyordanov/eumis.git',
-  branch: 'master',
+  repository: 'git@github.com:angelyordanov/eumis.git',
   cloneDir: './repo'
 };
 
 exports.build = function (branch, hash, buildHistory) {
+  if (branch !== 'master') {
+    return false; //skip
+  }
+
   var smallhash = hash.substr(0, 6);
 
   function command(cmd, cwd) {
@@ -47,7 +50,12 @@ exports.build = function (branch, hash, buildHistory) {
       './src/build/eumis')
   ], q.when, q(0)).spread(function (stdout, stderr) {
     if (stderr) {
+      //msdeploy will not return a non-zero error code
+      //informing 'exec' that the command failed
+      //but will just print some text on the stderrr
       throw new Error(stderr);
     }
+    
+    return true;
   });
 };
