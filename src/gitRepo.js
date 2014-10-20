@@ -1,6 +1,6 @@
 'use strict';
 /*jshint globalstrict:true*/
-/*global require, module*/
+/*global require, module, console*/
 
 var _ = require('lodash'),
     q = require('q'),
@@ -28,12 +28,41 @@ function GitRepo(dir) {
   };
 }
 
-GitRepo.prototype.fetch = function () {
-  var git = this._git;
+GitRepo.prototype.fetchAndPruneLocalOnly = function () {
+  var self = this;
+  
   this._chain(function () {
-    return git('fetch --all -p');
+    return self._git('fetch --all -p');
   });
-  return this._updateBranchInfo();
+  
+  this._updateBranchInfo();
+  
+  //detach head
+  this._chain(function () {
+    return self._git('checkout HEAD~1').then(function () {
+      _.forEach(self.branches, function (b) {
+        b.isCurrent = false;
+      });
+    });
+  });
+  
+  //delete all local branches that do not have a remote
+  return this._chain(function () {
+    return _(self.branches)
+      .omit(function (b) { return b.remoteHash; })
+      .keys()
+      .map(function (b) {
+        return function () {
+          console.log('deleting local branch \'' + b + '\'');
+          return self._git('branch -D ' + b);
+        };
+      //chain all 'git branch -D' promises sequentially
+      }).reduce(q.when, q(0)).then(function () {
+        self.branches = _.omit(self.branches, function (b) {
+          return !b.remoteHash;
+        });
+      });
+  });
 };
 
 GitRepo.prototype._initBranchInfo = function () {
@@ -71,7 +100,7 @@ GitRepo.prototype._updateBranchInfo = function () {
               branches[b].localHash = hash.trim();
             });
           };
-        }).reduce(q.when, q(0));//chain all rev-parse promises sequentially
+        }).reduce(q.when, q(0));//chain all 'git rev-parse' promises sequentially
     }).then(function () {
       return git('branch --remote');
     }).then(function (remoteBranches) {

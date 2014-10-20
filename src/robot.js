@@ -45,7 +45,7 @@ if (fs.existsSync(cloneDir)) {
 function doBuild(starting) {
   function fetch() {
     console.log('fetching repo...');
-    return repo.fetch().then(function () {
+    return repo.fetchAndPruneLocalOnly().then(function () {
       console.log('repo fetched');
     });
   }
