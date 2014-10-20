@@ -4,17 +4,23 @@
 /*jshint globalstrict:true*/
 /*global require, console, process*/
 
-var _ = require('lodash'),
-    express = require('express'),
+    //node modules
+var crypto = require('crypto'),
     fs = require('fs'),
     path = require('path'),
+    http = require('http'),
+
+    //npm modules
+    _ = require('lodash'),
+    express = require('express'),
     gitPromise = require('git-promise'),
     q = require('q'),
-    GitRepo = require('./gitRepo'),
     JsonDB = require('node-json-db'),
     
-    app = express(),
-    http = require('http'),
+    //local
+    GitRepo = require('./gitRepo'),
+
+    //vars
     yolofile = require(path.join(process.cwd(), 'yolofile.js')),
     config = yolofile.config,
     cloneDir = config.cloneDir,
@@ -63,7 +69,7 @@ function doBuild(starting) {
 
     console.log('building branch \'' + branch + '\'...');
     try {
-      result = q.when(yolofile.build(branch, hash, buildHistory));
+      result = q.when(yolofile.build(branch, hash));
     } catch (err) {
       result = q.reject(err);
     }
@@ -133,15 +139,46 @@ next = next.then(function () {
 }).then(function () {
   return doBuild(true);
 }).then(function () {
+  var app = express();
+
+  //digest the body
+  app.use(function (req, res, next) {
+    var hmac = crypto.createHmac('sha1', config.webhooksSecret);
+
+    req.on('data', function (data) {
+      hmac.update(data);
+    });
+
+    req.on('end', function () {
+      req.sha1HexDigest = hmac.digest('hex');
+      next();
+    });
+  });
+  
+  //handle github webhook posts
   app.post('/' + config.webhooksPath, function (req, res) {
+    //verify signature
+    if (req.get('X-Hub-Signature') !== 'sha1=' + req.sha1HexDigest) {
+      console.log('webhook called but signature verification failed!');
+      res.writeHead(500, {'Content-Type': 'text/plain'});
+      res.end('Signatures didn\'t match!');
+      return;
+    }
+    
     console.log('webhook called');
     res.writeHead(200, {'Content-Type': 'text/plain'});
     res.end();
 
+    //chain a build
     next = next.then(function () {
       return doBuild(false);
-    }).done();//throw any errors caught during build
+    });
+
+    //throw any errors caught during build
+    next.done();
   });
+  
+  //handle any errors
   app.use(function (err, req, res, next) {
     if (!err) {
       return next();
@@ -149,6 +186,8 @@ next = next.then(function () {
     //log thrown exceptions
     console.log(err);
   });
+  
+  //start server
   http.createServer(app).listen(config.webhooksPort, function () {
     console.log(
       'robot webhooks listening on port ' + config.webhooksPort +

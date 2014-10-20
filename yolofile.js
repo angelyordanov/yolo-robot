@@ -10,11 +10,12 @@ var _ = require('lodash'),
 exports.config = {
   webhooksPort: 3637,
   webhooksPath: 'webhooks',
+  webhooksSecret: 'secret',
   repository: 'git@github.com:angelyordanov/eumis.git',
   cloneDir: './repo'
 };
 
-exports.build = function (branch, hash, buildHistory) {
+exports.build = function (branch, hash) {
   if (branch !== 'master') {
     return false; //skip
   }
