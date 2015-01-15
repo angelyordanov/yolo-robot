@@ -55,9 +55,17 @@ function doBuild(starting) {
     db.push('/buildHistory', [], false);
     
     var buildHistory = db.getData('/buildHistory'),
-        lastBuild = buildHistory[buildHistory.length - 1],
         hash = repo.branches[branch].localHash,
-        result;
+        lastBuild,
+        result,
+        i;
+    
+    for (i = buildHistory.length - 1; i >= 0; i--) {
+      if (buildHistory[i].branch === branch) {
+        lastBuild = buildHistory[i];
+        break;
+      }
+    }
     
     if (lastBuild &&
       (!starting || lastBuild.succeeded) && //build failed branches on startup
@@ -110,7 +118,6 @@ function doBuild(starting) {
   function createBranchBuilder(branch) {
     return function () {
       return _.reduce([
-        _.bind(repo.checkout, repo, branch),
         _.bind(repo.resetHardToRemote, repo, branch),
         _.partial(build, branch)
       ], q.when, q(0));

@@ -37,6 +37,11 @@ GitRepo.prototype.fetchAndPruneLocalOnly = function () {
   
   this._updateBranchInfo();
   
+  //revert changes
+  this._chain(function () {
+    return self._git('reset HEAD --hard');
+  });
+  
   //detach head
   this._chain(function () {
     return self._git('checkout HEAD~1').then(function () {
@@ -80,7 +85,7 @@ GitRepo.prototype._updateBranchInfo = function () {
     return git('branch').then(function (localBranches) {
       return _(localBranches.split('\n'))
         .map(function (b) { return b.trim(); })
-        .filter(function (b) { return b !== ''; })
+        .filter(function (b) { return b !== '' && b !== '* (no branch)'; })
         .map(function (b) {
           var isCurrent = false;
           if (b.indexOf('*') === 0) {
@@ -128,10 +133,22 @@ GitRepo.prototype._updateBranchInfo = function () {
   });
 };
 
-GitRepo.prototype.checkout = function (branch) {
+GitRepo.prototype.resetHardToRemote = function (branch) {
   var self = this;
   this._initBranchInfo();
-  return this._chain(function () {
+  
+  //revert changes
+  this._chain(function () {
+    return self._git('reset HEAD --hard');
+  });
+  
+  //clean untracked
+  this._chain(function () {
+    return self._git('clean -xfd');
+  });
+  
+  //checkout branch
+  this._chain(function () {
     var b = self.branches[branch];
     if (!b) {
       throw new Error('no such branch \'' + branch + '\' in the repository');
@@ -148,11 +165,8 @@ GitRepo.prototype.checkout = function (branch) {
       b.isCurrent = true;
     });
   });
-};
 
-GitRepo.prototype.resetHardToRemote = function (branch) {
-  var self = this;
-  this._initBranchInfo();
+  //reset to remote branch
   return this._chain(function () {
     var b = self.branches[branch];
     if (!b) {
