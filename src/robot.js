@@ -49,15 +49,11 @@ function doBuild(starting) {
       console.log('repo fetched');
     });
   }
-
-  function build(branch) {
-    //init build history
-    db.push('/buildHistory', [], false);
-    
+  
+  function shouldBuild(branch) {
     var buildHistory = db.getData('/buildHistory'),
         hash = repo.branches[branch].localHash,
         lastBuild,
-        result,
         i;
     
     for (i = buildHistory.length - 1; i >= 0; i--) {
@@ -71,9 +67,15 @@ function doBuild(starting) {
       (!starting || lastBuild.succeeded) && //build failed branches on startup
       lastBuild.hash === hash
     ) {
-      console.log('no changes in branch \'' + branch + '\'');
-      return q(0);
+      return false;
     }
+    
+    return true;
+  }
+
+  function build(branch) {
+    var hash = repo.branches[branch].localHash,
+        result;
 
     console.log('building branch \'' + branch + '\'...');
     try {
@@ -117,10 +119,14 @@ function doBuild(starting) {
 
   function createBranchBuilder(branch) {
     return function () {
-      return _.reduce([
-        _.bind(repo.resetHardToRemote, repo, branch),
-        _.partial(build, branch)
-      ], q.when, q(0));
+      if (shouldBuild(branch)) {
+        return repo.resetHardToRemote(branch).then(function () {
+          return build(branch);
+        });
+      }
+      
+      console.log('no changes in branch \'' + branch + '\'');
+      return q(0);
     };
   }
 
@@ -133,6 +139,9 @@ function doBuild(starting) {
 }
 
 next = q(0);
+
+//init build history
+db.push('/buildHistory', [], false);
 
 next = next.then(function () {
   if (!cloned) {
