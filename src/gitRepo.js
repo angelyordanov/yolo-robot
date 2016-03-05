@@ -54,7 +54,7 @@ GitRepo.prototype.fetchAndPruneLocalOnly = function () {
   //delete all local branches that do not have a remote
   return this._chain(function () {
     return _(self.branches)
-      .omit(function (b) { return b.remoteHash; })
+      .omitBy(function (b) { return b.remoteHash; })
       .keys()
       .map(function (b) {
         return function () {
