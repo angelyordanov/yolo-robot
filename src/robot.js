@@ -52,7 +52,7 @@ function doBuild(starting) {
   
   function shouldBuild(branch) {
     var buildHistory = db.getData('/buildHistory'),
-        hash = repo.branches[branch].localHash,
+        hash = repo.branches[branch].remoteHash,
         lastBuild,
         i;
     
