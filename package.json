@@ -6,7 +6,7 @@
     "lodash": "4.6.1",
     "git-promise": "0.2.0",
     "q": "~1.0.0",
-    "node-json-db": "0.3.2"
+    "node-json-db": "0.6.1"
   },
   "devDependencies": {
     "gulp": "^3.8.8",

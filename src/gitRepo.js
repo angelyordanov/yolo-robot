@@ -42,11 +42,22 @@ GitRepo.prototype.fetchAndPruneLocalOnly = function () {
     return self._git('reset HEAD --hard');
   });
   
-  //detach head
+  //checkout a tracked branch
   this._chain(function () {
-    return self._git('checkout HEAD~1').then(function () {
+    var trackedBranch =
+      _(self.branches)
+      .omitBy(function (b) { return !b.remoteHash; })
+      .keys()
+      .next()
+      .value;
+     
+    if (trackedBranch === undefined) {
+      console.log('no tracked branches');
+    }
+    
+    return self._git('checkout ' + trackedBranch).then(function () {
       _.forEach(self.branches, function (b) {
-        b.isCurrent = false;
+        b.isCurrent = trackedBranch === b;
       });
     });
   });
@@ -85,8 +96,11 @@ GitRepo.prototype._updateBranchInfo = function () {
     return git('branch').then(function (localBranches) {
       return _(localBranches.split('\n'))
         .map(function (b) { return b.trim(); })
-        .filter(function (b) { return b !== '' && b !== '* (no branch)'; })
-        .map(function (b) {
+        .filter(function (b) {
+          return b !== '' &&
+            b !== '* (no branch)' &&
+            b.indexOf('* (HEAD detached') === -1;
+        }).map(function (b) {
           var isCurrent = false;
           if (b.indexOf('*') === 0) {
             b = b.substr(1).trim();
